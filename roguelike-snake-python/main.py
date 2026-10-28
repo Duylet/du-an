@@ -372,8 +372,6 @@ class SnakeGame:
             else:
                 move_timer = 0
             self.draw()
-            if self.assistant_open:
-                self.draw_assistant()
 
         pygame.quit()
         sys.exit()
