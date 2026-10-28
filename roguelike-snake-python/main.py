@@ -4,6 +4,10 @@ from pathlib import Path
 
 import pygame
 
+from openclaw_client import OpenClawClient, OpenClawError
+from threading import Thread
+from queue import Queue, Empty
+
 # Roguelike Snake — Neon Dungeon
 WIDTH, HEIGHT = 900, 650
 CELL = 25
@@ -48,6 +52,14 @@ class SnakeGame:
         self.big = pygame.font.SysFont("consolas", 42, bold=True)
         self.best = load_best()
         self.state = "menu"
+        self.assistant = OpenClawClient()
+        self.assistant_open = False
+        self.assistant_input = ""
+        self.assistant_messages = [
+            ("assistant", "Xin chào! Nhấn F1 để hỏi trợ lý về game.")
+        ]
+        self.assistant_queue = Queue()
+        self.assistant_busy = False
         self.reset()
 
     def reset(self):
@@ -237,6 +249,46 @@ class SnakeGame:
 
         pygame.display.flip()
 
+
+    def draw_assistant(self):
+        panel = pygame.Rect(70, 80, WIDTH - 140, HEIGHT - 150)
+        shade = pygame.Surface((WIDTH, HEIGHT), pygame.SRCALPHA)
+        shade.fill((2, 5, 15, 190))
+        self.screen.blit(shade, (0, 0))
+        pygame.draw.rect(self.screen, PANEL, panel, border_radius=14)
+        pygame.draw.rect(self.screen, CYAN, panel, 2, border_radius=14)
+        self.draw_text("OPENCLAW GAME ASSISTANT", panel.x + 22, panel.y + 18, CYAN)
+        self.draw_text("Enter: gửi  |  F1/Esc: đóng", panel.right - 250, panel.y + 20, MUTED, self.small)
+        y = panel.y + 62
+        for role, message in self.assistant_messages[-6:]:
+            color = GOLD if role == "user" else RED if role == "error" else WHITE
+            prefix = "BẠN: " if role == "user" else "LỖI: " if role == "error" else "AI: "
+            lines = []
+            words = (prefix + message).split()
+            line = ""
+            for word in words:
+                candidate = (line + " " + word).strip()
+                if self.small.size(candidate)[0] > panel.width - 45 and line:
+                    lines.append(line)
+                    line = word
+                else:
+                    line = candidate
+            if line:
+                lines.append(line)
+            for line in lines[:3]:
+                self.draw_text(line, panel.x + 22, y, color, self.small)
+                y += 21
+            y += 7
+            if y > panel.bottom - 90:
+                break
+        pygame.draw.line(self.screen, GRID, (panel.x + 20, panel.bottom - 65),
+                         (panel.right - 20, panel.bottom - 65), 1)
+        typed = self.assistant_input
+        self.draw_text("> " + typed[-70:] + ("▌" if not self.assistant_busy else "  [Đang trả lời...]"),
+                       panel.x + 22, panel.bottom - 48, GREEN, self.small)
+        self.draw_text("Lưu ý: câu trả lời cần Gateway OpenClaw đang chạy trên máy.", panel.x + 22,
+                       panel.bottom - 25, MUTED, self.small)
+
     def run(self):
         move_timer = 0
         running = True
@@ -247,7 +299,38 @@ class SnakeGame:
                 if event.type == pygame.QUIT:
                     running = False
                 elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_ESCAPE:
+                    if self.assistant_open:
+                        if event.key == pygame.K_ESCAPE:
+                            self.assistant_open = False
+                        elif event.key == pygame.K_BACKSPACE:
+                            self.assistant_input = self.assistant_input[:-1]
+                        elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                            prompt = self.assistant_input.strip()
+                            if prompt and not self.assistant_busy:
+                                self.assistant_input = ""
+                                self.assistant_messages.append(("user", prompt))
+                                self.assistant_busy = True
+                                context = (
+                                    f"Trạng thái game Roguelike Snake: điểm={self.score}, "
+                                    f"tầng={self.floor}, máu={self.hp}, tinh thể={self.crystals}, "
+                                    f"khiên={self.shield}, trạng thái={self.state}. "
+                                    "Hãy trả lời bằng tiếng Việt, tập trung vào hướng dẫn chơi hoặc giải thích game."
+                                )
+                                def ask_assistant(question=prompt, game_context=context):
+                                    try:
+                                        answer = self.assistant.ask(question, game_context)
+                                        self.assistant_queue.put(("assistant", answer))
+                                    except OpenClawError as exc:
+                                        self.assistant_queue.put(("error", str(exc)))
+                                Thread(target=ask_assistant, daemon=True).start()
+                            elif not prompt:
+                                self.assistant_input = ""
+                        elif event.unicode and event.unicode.isprintable() and len(self.assistant_input) < 240:
+                            self.assistant_input += event.unicode
+                        continue
+                    if event.key == pygame.K_F1:
+                        self.assistant_open = not self.assistant_open
+                    elif event.key == pygame.K_ESCAPE:
                         running = False
                     elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                         if self.state in ("menu", "gameover"):
@@ -272,7 +355,16 @@ class SnakeGame:
                         if new_direction and new_direction != (-self.direction[0], -self.direction[1]):
                             self.next_direction = new_direction
 
-            if self.state == "playing":
+            try:
+                while True:
+                    role, message = self.assistant_queue.get_nowait()
+                    self.assistant_busy = False
+                    self.assistant_messages.append(("assistant" if role == "assistant" else "error", message))
+                    self.assistant_messages = self.assistant_messages[-6:]
+            except Empty:
+                pass
+
+            if self.state == "playing" and not self.assistant_open:
                 interval = max(65, 145 - self.speed_level * 10 - (self.floor - 1) * 3)
                 if move_timer >= interval:
                     move_timer = 0
@@ -280,6 +372,8 @@ class SnakeGame:
             else:
                 move_timer = 0
             self.draw()
+            if self.assistant_open:
+                self.draw_assistant()
 
         pygame.quit()
         sys.exit()
