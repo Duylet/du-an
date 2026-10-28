@@ -247,6 +247,8 @@ class SnakeGame:
                 self.draw_text(f"Điểm của bạn: {self.score}", WIDTH // 2, 325, WHITE, self.font, True)
                 self.draw_text("Nhấn ENTER để chơi lại", WIDTH // 2, 390, GOLD, self.font, True)
 
+        if self.assistant_open:
+            self.draw_assistant()
         pygame.display.flip()
 
 
