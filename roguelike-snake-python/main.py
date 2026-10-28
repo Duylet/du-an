@@ -302,7 +302,7 @@ class SnakeGame:
                     running = False
                 elif event.type == pygame.KEYDOWN:
                     if self.assistant_open:
-                        if event.key == pygame.K_ESCAPE:
+                        if event.key in (pygame.K_ESCAPE, pygame.K_F1):
                             self.assistant_open = False
                         elif event.key == pygame.K_BACKSPACE:
                             self.assistant_input = self.assistant_input[:-1]
