@@ -61,3 +61,10 @@ python main.py
 
 - `main.py`: vòng lặp game, vẽ giao diện, điều khiển và logic.
 - `requirements.txt`: thư viện cần cài.
+
+
+## Trợ lý AI OpenClaw (tùy chọn)
+
+Game có thể kết nối tới OpenClaw Gateway cục bộ để hỏi đáp về cách chơi và trạng thái lượt chơi. Nhấn **F1** để mở trợ lý, nhập câu hỏi rồi nhấn **Enter**; nhấn **F1** hoặc **Esc** để đóng. Game vẫn chạy nếu chưa cấu hình OpenClaw.
+
+Xem hướng dẫn thiết lập, cấu hình Gateway và lưu token an toàn tại [OPENCLAW_INTEGRATION.md](OPENCLAW_INTEGRATION.md).
